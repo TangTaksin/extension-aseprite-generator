@@ -491,21 +491,27 @@ local function open_model_dialog()
         id = "lora_str",
         label = "LoRA Str:",
         min = 0,
-        max = 2,
-        value = current_settings.lora_strength,
-        onchange = function(ev)
-            current_settings.lora_strength = model_dlg.data.lora_str
+        max = 200,
+        value = math.floor(current_settings.lora_strength * 100),
+        onchange = function()
+            -- หาร 100 เพื่อแปลงกลับเป็น Float (เช่น 85 -> 0.85)
+            current_settings.lora_strength = model_dlg.data.lora_str / 100
         end
     }
+
+    -- แสดงค่าตัวเลขกำกับเพื่อให้ผู้ใช้รู้ว่าตอนนี้อยู่ที่เท่าไหร่
+    model_dlg:label{
+        id = "str_val",
+        text = string.format("Current: %.2f", current_settings.lora_strength)
+    }
+
     model_dlg:button{
         text = "Close",
         onclick = function()
             model_dlg:close()
         end
     }
-    model_dlg:show{
-        wait = false
-    }
+    model_dlg:show()
 end
 
 -- สร้างหน้าต่างหลักแบบ Global Function เพื่อให้เรียกตัวเองได้เวลารีเฟรช Profile
