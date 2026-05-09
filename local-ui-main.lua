@@ -11,7 +11,6 @@ local function safe_dofile(filename)
     return result
 end
 
--- Load required libraries
 local json = safe_dofile("json.lua")
 local base64 = safe_dofile("base64.lua")
 local http_client = safe_dofile("http-client.lua")
@@ -21,24 +20,22 @@ if not json or not base64 or not http_client then
     return
 end
 
--- Plugin configuration
 local plugin_config = {
     server_url = "http://127.0.0.1:5000",
     name = "Local AI Generator v2.0",
     version = "2.0"
 }
 
--- Global state
 local is_generating = false
 local current_dialog = nil
 local available_models = {"ponyDiffusionV6XL_v6StartWithThisOne.safetensors"}
-local available_loras = {"None"} -- ✅ แก้: เพิ่ม "" ให้เป็นตารางที่ถูกต้อง
+local available_loras = {"None"}
 local server_status = "Unknown"
 local last_generation_time = 0
 local loading_timer = nil
 local loading_dots = 0
+local last_successful_seed = -1
 
--- Default settings
 local current_settings = {
     prompt = "shirosu00, chibi, 1girl, solo, Reze, short dark purple hair, braided side bangs, green eyes, school uniform, playful smile, looking at viewer, super deformed, oversized head, tiny body, pixel art, 16-bit sprite, bomb pin, simple blue background, <lora:shirosu0011:1>, score_8_up, score_7_up, score_anime",
     negative_prompt = "score_6, score_5, score_4, score_3, score_2, score_1, realistic, 3d, blurry, lowres, bad anatomy, extra limbs, extra fingers, text, watermark, duplicate",
@@ -56,7 +53,6 @@ local current_settings = {
     generation_quality = "High (1024x1024)"
 }
 
--- Preset prompts
 local preset_prompts =
     {"pixel art, single lone character, cyberpunk girl with neon glowing hair, solo, futuristic visor, detailed sprite",
      "pixel art, single character, brave knight in shining plate armor, standing, solo, fantasy RPG, 16-bit sprite",
@@ -66,7 +62,6 @@ local preset_prompts =
      "shirosu00, chibi, 1girl, solo, Makima, red hair, braid, yellow concentric eyes, white shirt, black tie, smug smile, looking at viewer, super deformed, oversized head, tiny body, pixel art, 16-bit sprite, floating chains, simple red background, <lora:shirosu0011:1>, score_8_up, score_7_up, score_anime",
      "shirosu00, chibi, 1girl, solo, Reze, short dark purple hair, braided side bangs, green eyes, school uniform, playful smile, looking at viewer, super deformed, oversized head, tiny body, pixel art, 16-bit sprite, bomb pin, simple blue background, <lora:shirosu0011:1>, score_8_up, score_7_up, score_anime"}
 
--- Dimension presets
 local dimension_presets = {{
     name = "Tiny (32x32)",
     width = 32,
@@ -92,47 +87,48 @@ local dimension_presets = {{
     width = 96,
     height = 64
 }}
+local size_options = {}
+for _, p in ipairs(dimension_presets) do
+    table.insert(size_options, p.name)
+end
 
--- Utility functions
 local function format_time(seconds)
     if seconds < 60 then
         return string.format("%.1fs", seconds)
-    else
-        return string.format("%.1fm", seconds / 60)
     end
+    return string.format("%.1fm", seconds / 60)
 end
 
--- ✅ NEW: ฟังก์ชันแสดงสถานะที่ปลอดภัย (ใช้ = ไม่ใช่ ())
+local function format_seed(seed_val)
+    if not seed_val or seed_val <= 0 then
+        return "-1"
+    end
+    return string.format("%.0f", seed_val)
+end
+
 local function set_status_bar(msg)
     app.statusBar = tostring(msg or "")
-    app.refresh() -- บังคับอัปเดต UI ทันที
+    app.refresh()
 end
 
--- Fetch data from server
 local function fetch_models_and_loras(callback)
     server_status = "Connecting..."
-    set_status_bar("🔌 Connecting to server...") -- ✅ ใช้ฟังก์ชันใหม่
+    set_status_bar("Connecting to server...")
 
-    -- 1. ดึงรายชื่อ Models
     http_client.get(plugin_config.server_url .. "/models", function(res, err)
         if res and res.models then
             available_models = res.models
         end
-
-        -- 2. ดึงรายชื่อ LoRAs
         http_client.get(plugin_config.server_url .. "/loras", function(res2, err2)
             if res2 and res2.loras then
                 available_loras = res2.loras
             end
-
-            -- 3. ตรวจสอบสถานะ Server
             http_client.get(plugin_config.server_url .. "/health", function(health_res, health_err)
                 if health_res then
                     server_status = "Online" .. (health_res.current_model and (" - " .. health_res.current_model) or "")
                 else
                     server_status = "Offline"
                 end
-
                 if callback then
                     callback()
                 end
@@ -141,7 +137,6 @@ local function fetch_models_and_loras(callback)
     end)
 end
 
--- Core generation logic
 local function generate_image(settings, callback)
     if is_generating then
         return
@@ -180,7 +175,6 @@ local function generate_image(settings, callback)
     end)
 end
 
--- Image placement functions
 local function prepare_image_for_generation(output_method, image_mode)
     local cel
     app.transaction("AI Generation Setup", function()
@@ -189,12 +183,7 @@ local function prepare_image_for_generation(output_method, image_mode)
             colorMode = image_mode
         })
         app.activeLayer = layer
-        local frame
-        if output_method == "New Frame" then
-            frame = app.activeSprite:newEmptyFrame()
-        else
-            frame = app.activeFrame
-        end
+        local frame = (output_method == "New Frame") and app.activeSprite:newEmptyFrame() or app.activeFrame
         cel = app.activeSprite:newCel(layer, frame)
     end)
     return cel
@@ -223,28 +212,24 @@ local function update_dialog_status(dlg)
     if not dlg then
         return
     end
-
     if is_generating then
-        -- 🎨 สถานะ: กำลัง Generate
         dlg:modify{
             id = "generate",
             enabled = false
         }
-
         if not loading_timer then
             loading_timer = Timer {
                 interval = 0.25,
                 ontick = function()
                     if not is_generating then
-                        loading_timer:stop()
+                        loading_timer:stop();
                         return
                     end
                     loading_dots = (loading_dots + 1) % 4
                     local dots = string.rep(".", loading_dots)
-
                     dlg:modify{
                         id = "server_status_label",
-                        text = "Status: 🎨 Generating AI" .. dots
+                        text = "Status: Generating AI" .. dots
                     }
                     dlg:modify{
                         id = "generate",
@@ -254,13 +239,10 @@ local function update_dialog_status(dlg)
             }
         end
         loading_timer:start()
-
     else
-        -- ✅ สถานะ: ปกติ
         if loading_timer then
             loading_timer:stop()
         end
-
         dlg:modify{
             id = "server_status_label",
             text = "Status: " .. server_status
@@ -270,7 +252,6 @@ local function update_dialog_status(dlg)
             enabled = true,
             text = "Generate Image"
         }
-
         if last_generation_time > 0 then
             dlg:modify{
                 id = "generation_time_label",
@@ -280,7 +261,6 @@ local function update_dialog_status(dlg)
     end
 end
 
--- UI Dialogs
 local function open_advanced_dialog()
     local adv_dlg = Dialog("Advanced Settings")
     adv_dlg:slider{
@@ -289,7 +269,7 @@ local function open_advanced_dialog()
         min = 10,
         max = 50,
         value = current_settings.steps,
-        onchange = function(ev) -- ✅ เพิ่ม parameter ev
+        onchange = function(ev)
             current_settings.steps = adv_dlg.data.steps
         end
     }
@@ -303,22 +283,12 @@ local function open_advanced_dialog()
             current_settings.guidance_scale = adv_dlg.data.guidance_scale
         end
     }
-    adv_dlg:number{
-        id = "seed",
-        label = "Seed:",
-        text = tostring(current_settings.seed),
-        onchange = function(ev)
-            current_settings.seed = adv_dlg.data.seed
-        end
-    }
-
     adv_dlg:button{
         text = "Close",
         onclick = function()
             adv_dlg:close()
         end
     }
-    -- ✅ แก้: ใช้ {} โดยตรง ไม่ต้องหุ้มด้วย ()
     adv_dlg:show{
         wait = false
     }
@@ -332,8 +302,8 @@ local function open_model_dialog()
         options = available_models,
         option = current_settings.model_name,
         onchange = function(ev)
-            current_settings.model_name = model_dlg.data.model_name
-            server_status = "Ready - " .. current_settings.model_name
+            current_settings.model_name = model_dlg.data.model_name;
+            server_status = "Ready - " .. current_settings.model_name;
             update_dialog_status(current_dialog)
         end
     }
@@ -371,7 +341,6 @@ local function open_model_dialog()
             model_dlg:close()
         end
     }
-    -- ✅ แก้: ใช้ {} โดยตรง
     model_dlg:show{
         wait = false
     }
@@ -405,7 +374,6 @@ local function create_main_dialog()
             current_settings.prompt = dlg.data.prompt
         end
     }
-
     dlg:entry{
         id = "negative_prompt",
         label = "Negative:",
@@ -414,13 +382,12 @@ local function create_main_dialog()
             current_settings.negative_prompt = dlg.data.negative_prompt
         end
     }
-
     dlg:combobox{
         id = "preset",
         label = "Presets:",
         options = preset_prompts,
         onchange = function(ev)
-            current_settings.prompt = dlg.data.preset
+            current_settings.prompt = dlg.data.preset;
             dlg:modify{
                 id = "prompt",
                 text = current_settings.prompt
@@ -430,12 +397,12 @@ local function create_main_dialog()
     dlg:combobox{
         id = "size",
         label = "Size:",
-        options = {"Tiny (32x32)", "Small (64x64)", "Medium (128x128)", "Large (256x256)", "Portrait (64x96)",
-                   "Landscape (96x64)"},
+        options = size_options,
+        option = "Small (64x64)",
         onchange = function(ev)
             for _, p in ipairs(dimension_presets) do
                 if p.name == dlg.data.size then
-                    current_settings.pixel_width = p.width
+                    current_settings.pixel_width = p.width;
                     current_settings.pixel_height = p.height
                 end
             end
@@ -466,6 +433,43 @@ local function create_main_dialog()
             current_settings.output_method = dlg.data.out
         end
     }
+
+    -- ✅ ระบบจัดการ Seed ใหม่ ใช้งานง่ายและไม่มีบั๊ก
+    dlg:separator{}
+    dlg:entry{
+        id = "seed_val",
+        label = "Seed:",
+        text = format_seed(current_settings.seed)
+    }
+
+    -- จัดปุ่มให้อยู่บรรทัดเดียวกัน
+    dlg:button{
+        text = "🎲 Random (-1)",
+        onclick = function()
+            dlg:modify{
+                id = "seed_val",
+                text = "-1"
+            }
+        end
+    }
+    dlg:button{
+        text = "♻️ Use Last Seed",
+        onclick = function()
+            if last_successful_seed > 0 then
+                dlg:modify{
+                    id = "seed_val",
+                    text = format_seed(last_successful_seed)
+                }
+            else
+                app.alert("No previous generated seed found!")
+            end
+        end
+    }
+
+    dlg:label{
+        id = "seed_result_label",
+        text = "Last Seed: " .. format_seed(last_successful_seed)
+    }
     dlg:separator{}
 
     dlg:button{
@@ -482,40 +486,62 @@ local function create_main_dialog()
         text = "Ready"
     }
 
-    dlg:label{
-        id = "seed_result_label",
-        text = "Seed: - (None)"
-    }
-
     dlg:button{
         id = "generate",
         text = "Generate Image",
         focus = true,
         onclick = function()
-            if not current_settings.prompt or current_settings.prompt == "" then
-                app.alert("Prompt is empty")
+            -- เก็บค่าตัวแปรทุกอย่างล่าสุด
+            current_settings.prompt = dlg.data.prompt
+            current_settings.negative_prompt = dlg.data.negative_prompt
+            current_settings.output_method = dlg.data.out
+            current_settings.remove_background = dlg.data.remove_bg
+            current_settings.colors = dlg.data.colors
+
+            -- ✅ อ่านค่า Seed ณ วินาทีที่กดปุ่ม เพื่อให้ได้ค่าเป๊ะๆ เสมอ
+            local seed_input = tonumber(dlg.data.seed_val)
+            if not seed_input then
+                seed_input = -1
+            end
+            current_settings.seed = seed_input
+
+            -- ปรับฟอร์แมตช่องให้อ่านง่ายเผื่อพิมพ์ขยะลงไป
+            dlg:modify{
+                id = "seed_val",
+                text = format_seed(current_settings.seed)
+            }
+
+            if not current_settings.prompt or current_settings.prompt:match("^%s*$") then
+                app.alert("Prompt is empty");
                 return
             end
-            set_status_bar("🎨 Generating...") -- ✅ ใช้ฟังก์ชันใหม่
+
+            set_status_bar("Generating...")
             update_dialog_status(dlg)
+
             generate_image(current_settings, function(res, err)
                 update_dialog_status(dlg)
                 if err then
-                    app.alert("Error: " .. err)
-                    set_status_bar("❌ Error: " .. err)
+                    app.alert("Error: " .. tostring(err))
+                    set_status_bar("Error: " .. tostring(err))
                 elseif res and res.success then
                     if res.seed then
+                        last_successful_seed = res.seed
                         dlg:modify{
                             id = "seed_result_label",
-                            text = "Seed: " .. res.seed
+                            text = "Last Seed: " .. format_seed(res.seed)
                         }
-                        current_settings.seed = res.seed
+
+                        -- ไม่ต้องเคลียร์ช่อง Seed! ปล่อยให้มันคาไว้เป็นค่าที่ผู้ใช้ตั้ง 
+                        -- (ถ้าผู้ใช้ใส่ 123 ไว้ มันก็จะเป็น 123 ต่อไป = ล็อคแล้ว)
+                        -- (ถ้าผู้ใช้ใส่ -1 ไว้ มันก็จะเป็น -1 ต่อไป = สุ่มต่อไป)
                     end
+
                     place_image_in_aseprite_raw(res.image, current_settings.output_method)
-                    set_status_bar("✅ Done!")
+                    set_status_bar("Done!")
                 else
                     app.alert("Failed: " .. (res and res.error or "Unknown"))
-                    set_status_bar("❌ Failed")
+                    set_status_bar("Failed")
                 end
             end)
         end
