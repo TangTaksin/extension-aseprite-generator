@@ -53,6 +53,64 @@ local current_settings = {
     generation_quality = "High (1024x1024)"
 }
 
+-- =====================================
+-- 💾 ระบบจัดการ Settings Profiles
+-- =====================================
+local profiles_file_path = script_dir .. "/ai_profiles.json"
+local saved_profiles = {}
+
+-- ฟังก์ชันโคลน Table เพื่อป้องกันบั๊กการใช้ Reference ซ้อนกัน
+local function deepcopy(orig)
+    local orig_type = type(orig)
+    local copy
+    if orig_type == 'table' then
+        copy = {}
+        for orig_key, orig_value in pairs(orig) do
+            copy[deepcopy(orig_key)] = deepcopy(orig_value)
+        end
+    else
+        copy = orig
+    end
+    return copy
+end
+
+local function load_profiles_from_disk()
+    local file = io.open(profiles_file_path, "r")
+    if file then
+        local content = file:read("*a")
+        file:close()
+        local success, decoded = pcall(json.decode, content)
+        if success and type(decoded) == "table" then
+            saved_profiles = decoded
+            return
+        end
+    end
+    -- ถ้าเปิดครั้งแรก หรือไม่มีไฟล์ สร้าง Profile ชื่อ Default ไว้ให้
+    saved_profiles = {
+        ["Default"] = deepcopy(current_settings)
+    }
+end
+
+local function save_profiles_to_disk()
+    local file = io.open(profiles_file_path, "w")
+    if file then
+        file:write(json.encode(saved_profiles))
+        file:close()
+    end
+end
+
+local function get_profile_names()
+    local names = {}
+    for k, _ in pairs(saved_profiles) do
+        table.insert(names, k)
+    end
+    table.sort(names)
+    return names
+end
+
+-- =====================================
+-- (ฟังก์ชันเดิมอื่นๆ)
+-- =====================================
 local preset_prompts =
     {"pixel art, single lone character, cyberpunk girl with neon glowing hair, solo, futuristic visor, detailed sprite",
      "pixel art, single character, brave knight in shining plate armor, standing, solo, fantasy RPG, 16-bit sprite",
@@ -208,6 +266,13 @@ local function place_image_in_aseprite_raw(image_data, output_method)
     app.refresh()
 end
 
+-- =====================================
+-- 🖼️ UI การจัดการหน้าต่าง
+-- =====================================
+
+-- ประกาศฟังก์ชันไว้ก่อนเพื่อเรียกซ้ำเวลาเปลี่ยน Profile
+local create_main_dialog
+
 local function update_dialog_status(dlg)
     if not dlg then
         return
@@ -261,6 +326,94 @@ local function update_dialog_status(dlg)
     end
 end
 
+-- 📌 หน้าต่างจัดการ Profile
+local function open_profiles_dialog()
+    local p_dlg = Dialog("Manage Profiles")
+    local names = get_profile_names()
+    local selected_profile = names[1] or "Default"
+
+    p_dlg:combobox{
+        id = "profile_select",
+        label = "Select Profile:",
+        options = names,
+        option = selected_profile,
+        onchange = function()
+            selected_profile = p_dlg.data.profile_select
+        end
+    }
+
+    p_dlg:button{
+        text = "Load Profile",
+        onclick = function()
+            if saved_profiles[selected_profile] then
+                -- คัดลอกค่าจากโปรไฟล์ที่เลือกเข้าสู่ current_settings
+                current_settings = deepcopy(saved_profiles[selected_profile])
+                app.alert("Loaded profile: " .. selected_profile)
+                p_dlg:close()
+                create_main_dialog() -- โหลดเสร็จสั่งวาดหน้าต่าง UI ใหม่ให้ค่าอัปเดตตรงกัน
+            end
+        end
+    }
+
+    p_dlg:separator{}
+
+    p_dlg:button{
+        text = "Save Current As...",
+        onclick = function()
+            local save_dlg = Dialog("Save New Profile")
+            save_dlg:entry{
+                id = "p_name",
+                label = "Profile Name:",
+                text = selected_profile
+            }
+            save_dlg:button{
+                text = "Save",
+                onclick = function()
+                    local new_name = save_dlg.data.p_name
+                    if new_name and new_name ~= "" then
+                        saved_profiles[new_name] = deepcopy(current_settings)
+                        save_profiles_to_disk()
+                        app.alert("Saved profile: " .. new_name)
+                        save_dlg:close()
+                        p_dlg:close()
+                        open_profiles_dialog() -- รีเฟรชหน้าต่างเพื่อให้รายชื่ออัปเดต
+                    end
+                end
+            }
+            save_dlg:button{
+                text = "Cancel"
+            }
+            save_dlg:show()
+        end
+    }
+
+    p_dlg:button{
+        text = "Delete",
+        onclick = function()
+            if selected_profile == "Default" then
+                app.alert("Cannot delete the Default profile.")
+                return
+            end
+            saved_profiles[selected_profile] = nil
+            save_profiles_to_disk()
+            app.alert("Deleted profile: " .. selected_profile)
+            p_dlg:close()
+            open_profiles_dialog()
+        end
+    }
+
+    p_dlg:separator{}
+    p_dlg:button{
+        text = "Close",
+        onclick = function()
+            p_dlg:close()
+        end
+    }
+    p_dlg:show{
+        wait = false
+    }
+end
+
 local function open_advanced_dialog()
     local adv_dlg = Dialog("Advanced Settings")
     adv_dlg:slider{
@@ -283,7 +436,6 @@ local function open_advanced_dialog()
             current_settings.guidance_scale = adv_dlg.data.guidance_scale
         end
     }
-    -- ✅ ย้าย Output Method มาไว้ที่นี่
     adv_dlg:combobox{
         id = "out",
         label = "Output:",
@@ -356,12 +508,22 @@ local function open_model_dialog()
     }
 end
 
-local function create_main_dialog()
+-- สร้างหน้าต่างหลักแบบ Global Function เพื่อให้เรียกตัวเองได้เวลารีเฟรช Profile
+function create_main_dialog()
     if current_dialog then
         current_dialog:close()
     end
     local dlg = Dialog("Local AI Generator")
     current_dialog = dlg
+
+    -- คำนวณหาชื่อ Size ปัจจุบันเพื่อให้ Combobox แสดงผลได้ถูกต้องเวลาโหลด Profile
+    local current_size_name = "Small (64x64)"
+    for _, p in ipairs(dimension_presets) do
+        if p.width == current_settings.pixel_width and p.height == current_settings.pixel_height then
+            current_size_name = p.name
+            break
+        end
+    end
 
     dlg:label{
         id = "server_status_label",
@@ -408,7 +570,7 @@ local function create_main_dialog()
         id = "size",
         label = "Size:",
         options = size_options,
-        option = "Small (64x64)",
+        option = current_size_name,
         onchange = function(ev)
             for _, p in ipairs(dimension_presets) do
                 if p.name == dlg.data.size then
@@ -444,20 +606,18 @@ local function create_main_dialog()
         onchange = function(ev)
             local input_text = dlg.data.seed_val
             local cleaned_text = input_text:gsub("[^%d%-]", "")
-
             if input_text ~= cleaned_text then
                 dlg:modify{
                     id = "seed_val",
                     text = cleaned_text
                 }
             end
-
             current_settings.seed = tonumber(cleaned_text) or -1
         end
     }
 
     dlg:button{
-        text = "🎲 Random (-1)",
+        text = "⟲️ Reset to Default Seed (-1)",
         onclick = function()
             dlg:modify{
                 id = "seed_val",
@@ -487,6 +647,7 @@ local function create_main_dialog()
     }
     dlg:separator{}
 
+    -- ✅ ปุ่มสำหรับตั้งค่าต่างๆ รวมถึง Profiles
     dlg:button{
         text = "Model Settings",
         onclick = open_model_dialog
@@ -495,6 +656,19 @@ local function create_main_dialog()
         text = "Advanced Settings",
         onclick = open_advanced_dialog
     }
+
+    dlg:button{
+        text = "Manage Profiles",
+        onclick = function()
+            -- ซิงค์ค่าปัจจุบันเก็บไว้ก่อนเผื่อผู้ใช้เพิ่งพิมพ์เสร็จแล้วกดเซฟทันที
+            current_settings.prompt = dlg.data.prompt
+            current_settings.negative_prompt = dlg.data.negative_prompt
+            current_settings.colors = dlg.data.colors
+            current_settings.remove_background = dlg.data.remove_bg
+            open_profiles_dialog()
+        end
+    }
+
     dlg:separator{}
     dlg:label{
         id = "generation_time_label",
@@ -508,7 +682,6 @@ local function create_main_dialog()
         onclick = function()
             current_settings.prompt = dlg.data.prompt
             current_settings.negative_prompt = dlg.data.negative_prompt
-            -- เอา current_settings.output_method = dlg.data.out ออก เพราะย้ายไป Advanced แล้ว
             current_settings.remove_background = dlg.data.remove_bg
             current_settings.colors = dlg.data.colors
 
@@ -544,7 +717,6 @@ local function create_main_dialog()
                             text = "Last Seed: " .. format_seed(res.seed)
                         }
                     end
-
                     place_image_in_aseprite_raw(res.image, current_settings.output_method)
                     set_status_bar("Done!")
                 else
@@ -561,4 +733,8 @@ local function create_main_dialog()
     update_dialog_status(dlg)
 end
 
+-- =====================================
+-- 🚀 จุดเริ่มต้นการทำงาน
+-- =====================================
+load_profiles_from_disk() -- อ่านโปรไฟล์ขึ้นมาก่อนเลย
 fetch_models_and_loras(create_main_dialog)
