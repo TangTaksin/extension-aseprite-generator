@@ -283,6 +283,16 @@ local function open_advanced_dialog()
             current_settings.guidance_scale = adv_dlg.data.guidance_scale
         end
     }
+    -- ✅ ย้าย Output Method มาไว้ที่นี่
+    adv_dlg:combobox{
+        id = "out",
+        label = "Output:",
+        options = {"New Layer", "New Frame"},
+        option = current_settings.output_method,
+        onchange = function(ev)
+            current_settings.output_method = adv_dlg.data.out
+        end
+    }
     adv_dlg:button{
         text = "Close",
         onclick = function()
@@ -424,29 +434,17 @@ local function create_main_dialog()
             current_settings.remove_background = dlg.data.remove_bg
         end
     }
-    dlg:combobox{
-        id = "out",
-        label = "Output:",
-        options = {"New Layer", "New Frame"},
-        option = current_settings.output_method,
-        onchange = function(ev)
-            current_settings.output_method = dlg.data.out
-        end
-    }
 
     dlg:separator{}
 
-    -- ✅ ช่อง Seed ที่บังคับให้พิมพ์ได้แค่ตัวเลขและเครื่องหมายลบเท่านั้น
     dlg:entry{
         id = "seed_val",
         label = "Seed:",
         text = format_seed(current_settings.seed),
         onchange = function(ev)
             local input_text = dlg.data.seed_val
-            -- กรองเอาเฉพาะตัวเลข (0-9) และเครื่องหมายลบ (-) เท่านั้น
             local cleaned_text = input_text:gsub("[^%d%-]", "")
 
-            -- ถ้ามีการลบตัวอักษรแปลกปลอมออกไป ให้อัปเดตช่องใหม่ทันที
             if input_text ~= cleaned_text then
                 dlg:modify{
                     id = "seed_val",
@@ -454,7 +452,6 @@ local function create_main_dialog()
                 }
             end
 
-            -- บันทึกค่า
             current_settings.seed = tonumber(cleaned_text) or -1
         end
     }
@@ -511,7 +508,7 @@ local function create_main_dialog()
         onclick = function()
             current_settings.prompt = dlg.data.prompt
             current_settings.negative_prompt = dlg.data.negative_prompt
-            current_settings.output_method = dlg.data.out
+            -- เอา current_settings.output_method = dlg.data.out ออก เพราะย้ายไป Advanced แล้ว
             current_settings.remove_background = dlg.data.remove_bg
             current_settings.colors = dlg.data.colors
 
