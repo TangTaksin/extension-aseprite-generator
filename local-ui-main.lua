@@ -434,15 +434,31 @@ local function create_main_dialog()
         end
     }
 
-    -- ✅ ระบบจัดการ Seed ใหม่ ใช้งานง่ายและไม่มีบั๊ก
     dlg:separator{}
+
+    -- ✅ ช่อง Seed ที่บังคับให้พิมพ์ได้แค่ตัวเลขและเครื่องหมายลบเท่านั้น
     dlg:entry{
         id = "seed_val",
         label = "Seed:",
-        text = format_seed(current_settings.seed)
+        text = format_seed(current_settings.seed),
+        onchange = function(ev)
+            local input_text = dlg.data.seed_val
+            -- กรองเอาเฉพาะตัวเลข (0-9) และเครื่องหมายลบ (-) เท่านั้น
+            local cleaned_text = input_text:gsub("[^%d%-]", "")
+
+            -- ถ้ามีการลบตัวอักษรแปลกปลอมออกไป ให้อัปเดตช่องใหม่ทันที
+            if input_text ~= cleaned_text then
+                dlg:modify{
+                    id = "seed_val",
+                    text = cleaned_text
+                }
+            end
+
+            -- บันทึกค่า
+            current_settings.seed = tonumber(cleaned_text) or -1
+        end
     }
 
-    -- จัดปุ่มให้อยู่บรรทัดเดียวกัน
     dlg:button{
         text = "🎲 Random (-1)",
         onclick = function()
@@ -450,6 +466,7 @@ local function create_main_dialog()
                 id = "seed_val",
                 text = "-1"
             }
+            current_settings.seed = -1
         end
     }
     dlg:button{
@@ -460,6 +477,7 @@ local function create_main_dialog()
                     id = "seed_val",
                     text = format_seed(last_successful_seed)
                 }
+                current_settings.seed = last_successful_seed
             else
                 app.alert("No previous generated seed found!")
             end
@@ -491,21 +509,18 @@ local function create_main_dialog()
         text = "Generate Image",
         focus = true,
         onclick = function()
-            -- เก็บค่าตัวแปรทุกอย่างล่าสุด
             current_settings.prompt = dlg.data.prompt
             current_settings.negative_prompt = dlg.data.negative_prompt
             current_settings.output_method = dlg.data.out
             current_settings.remove_background = dlg.data.remove_bg
             current_settings.colors = dlg.data.colors
 
-            -- ✅ อ่านค่า Seed ณ วินาทีที่กดปุ่ม เพื่อให้ได้ค่าเป๊ะๆ เสมอ
             local seed_input = tonumber(dlg.data.seed_val)
             if not seed_input then
                 seed_input = -1
             end
             current_settings.seed = seed_input
 
-            -- ปรับฟอร์แมตช่องให้อ่านง่ายเผื่อพิมพ์ขยะลงไป
             dlg:modify{
                 id = "seed_val",
                 text = format_seed(current_settings.seed)
@@ -531,10 +546,6 @@ local function create_main_dialog()
                             id = "seed_result_label",
                             text = "Last Seed: " .. format_seed(res.seed)
                         }
-
-                        -- ไม่ต้องเคลียร์ช่อง Seed! ปล่อยให้มันคาไว้เป็นค่าที่ผู้ใช้ตั้ง 
-                        -- (ถ้าผู้ใช้ใส่ 123 ไว้ มันก็จะเป็น 123 ต่อไป = ล็อคแล้ว)
-                        -- (ถ้าผู้ใช้ใส่ -1 ไว้ มันก็จะเป็น -1 ต่อไป = สุ่มต่อไป)
                     end
 
                     place_image_in_aseprite_raw(res.image, current_settings.output_method)
