@@ -32,7 +32,7 @@ local plugin_config = {
 local is_generating = false
 local current_dialog = nil
 local available_models = {"ponyDiffusionV6XL_v6StartWithThisOne.safetensors"}
-local available_loras = {None}
+local available_loras = {"None"} -- ✅ แก้: เพิ่ม "" ให้เป็นตารางที่ถูกต้อง
 local server_status = "Unknown"
 local last_generation_time = 0
 local loading_timer = nil
@@ -83,6 +83,14 @@ local dimension_presets = {{
     name = "Large (256x256)",
     width = 256,
     height = 256
+}, {
+    name = "Portrait (64x96)",
+    width = 64,
+    height = 96
+}, {
+    name = "Landscape (96x64)",
+    width = 96,
+    height = 64
 }}
 
 -- Utility functions
@@ -94,9 +102,16 @@ local function format_time(seconds)
     end
 end
 
+-- ✅ NEW: ฟังก์ชันแสดงสถานะที่ปลอดภัย (ใช้ = ไม่ใช่ ())
+local function set_status_bar(msg)
+    app.statusBar = tostring(msg or "")
+    app.refresh() -- บังคับอัปเดต UI ทันที
+end
+
 -- Fetch data from server
 local function fetch_models_and_loras(callback)
     server_status = "Connecting..."
+    set_status_bar("🔌 Connecting to server...") -- ✅ ใช้ฟังก์ชันใหม่
 
     -- 1. ดึงรายชื่อ Models
     http_client.get(plugin_config.server_url .. "/models", function(res, err)
@@ -110,16 +125,14 @@ local function fetch_models_and_loras(callback)
                 available_loras = res2.loras
             end
 
-            -- 3. ตรวจสอบสถานะ Server (ข้าม /settings ไปได้เลยเพราะ Server ไม่มี)
+            -- 3. ตรวจสอบสถานะ Server
             http_client.get(plugin_config.server_url .. "/health", function(health_res, health_err)
                 if health_res then
-                    -- แสดงสถานะ Online พร้อมชื่อโมเดลที่รันอยู่
                     server_status = "Online" .. (health_res.current_model and (" - " .. health_res.current_model) or "")
                 else
                     server_status = "Offline"
                 end
 
-                -- เมื่อโหลดครบทุกอย่างแล้วค่อยรัน Callback เพื่อเปิดหน้าต่าง UI
                 if callback then
                     callback()
                 end
@@ -212,26 +225,23 @@ local function update_dialog_status(dlg)
     end
 
     if is_generating then
-        -- 🎨 สถานะ: กำลัง Generate -> ปิดการกดปุ่มและเริ่มอนิเมชั่น
+        -- 🎨 สถานะ: กำลัง Generate
         dlg:modify{
             id = "generate",
             enabled = false
         }
 
-        -- ถ้ายังไม่มี Timer ให้สร้างใหม่
         if not loading_timer then
             loading_timer = Timer {
-                interval = 0.25, -- อัปเดตทุก 0.25 วินาที
+                interval = 0.25,
                 ontick = function()
                     if not is_generating then
                         loading_timer:stop()
                         return
                     end
-                    -- สร้างอนิเมชั่นจุดไข่ปลา 1-3 จุด
                     loading_dots = (loading_dots + 1) % 4
                     local dots = string.rep(".", loading_dots)
 
-                    -- อัปเดตข้อความบน UI ให้ขยับได้
                     dlg:modify{
                         id = "server_status_label",
                         text = "Status: 🎨 Generating AI" .. dots
@@ -246,7 +256,7 @@ local function update_dialog_status(dlg)
         loading_timer:start()
 
     else
-        -- ✅ สถานะ: ปกติ (รอรับคำสั่ง) -> คืนค่าปุ่มและหยุดอนิเมชั่น
+        -- ✅ สถานะ: ปกติ
         if loading_timer then
             loading_timer:stop()
         end
@@ -279,7 +289,7 @@ local function open_advanced_dialog()
         min = 10,
         max = 50,
         value = current_settings.steps,
-        onchange = function()
+        onchange = function(ev) -- ✅ เพิ่ม parameter ev
             current_settings.steps = adv_dlg.data.steps
         end
     }
@@ -289,7 +299,7 @@ local function open_advanced_dialog()
         min = 1,
         max = 20,
         value = current_settings.guidance_scale,
-        onchange = function()
+        onchange = function(ev)
             current_settings.guidance_scale = adv_dlg.data.guidance_scale
         end
     }
@@ -297,7 +307,7 @@ local function open_advanced_dialog()
         id = "seed",
         label = "Seed:",
         text = tostring(current_settings.seed),
-        onchange = function()
+        onchange = function(ev)
             current_settings.seed = adv_dlg.data.seed
         end
     }
@@ -308,9 +318,10 @@ local function open_advanced_dialog()
             adv_dlg:close()
         end
     }
-    adv_dlg:show({
+    -- ✅ แก้: ใช้ {} โดยตรง ไม่ต้องหุ้มด้วย ()
+    adv_dlg:show{
         wait = false
-    })
+    }
 end
 
 local function open_model_dialog()
@@ -320,14 +331,9 @@ local function open_model_dialog()
         label = "Model:",
         options = available_models,
         option = current_settings.model_name,
-        onchange = function()
-            -- 1. ดึงข้อมูลจาก model_dlg (หน้าต่าง Settings)
+        onchange = function(ev)
             current_settings.model_name = model_dlg.data.model_name
-
-            -- 2. เปลี่ยนสถานะ
             server_status = "Ready - " .. current_settings.model_name
-
-            -- 3. สั่งอัปเดตหน้าต่างหลัก โดยใช้ตัวแปร current_dialog
             update_dialog_status(current_dialog)
         end
     }
@@ -336,7 +342,7 @@ local function open_model_dialog()
         label = "Quality:",
         options = {"Fast (512x512)", "High (1024x1024)", "Ultra (1536x1536)"},
         option = current_settings.generation_quality,
-        onchange = function()
+        onchange = function(ev)
             current_settings.generation_quality = model_dlg.data.quality
         end
     }
@@ -345,7 +351,7 @@ local function open_model_dialog()
         label = "LoRA:",
         options = available_loras,
         option = current_settings.lora_model,
-        onchange = function()
+        onchange = function(ev)
             current_settings.lora_model = model_dlg.data.lora
         end
     }
@@ -355,7 +361,7 @@ local function open_model_dialog()
         min = 0,
         max = 2,
         value = current_settings.lora_strength,
-        onchange = function()
+        onchange = function(ev)
             current_settings.lora_strength = model_dlg.data.lora_str
         end
     }
@@ -365,9 +371,10 @@ local function open_model_dialog()
             model_dlg:close()
         end
     }
-    model_dlg:show({
+    -- ✅ แก้: ใช้ {} โดยตรง
+    model_dlg:show{
         wait = false
-    })
+    }
 end
 
 local function create_main_dialog()
@@ -376,6 +383,7 @@ local function create_main_dialog()
     end
     local dlg = Dialog("Local AI Generator")
     current_dialog = dlg
+
     dlg:label{
         id = "server_status_label",
         text = "Status: " .. server_status
@@ -393,7 +401,7 @@ local function create_main_dialog()
         id = "prompt",
         label = "Prompt:",
         text = current_settings.prompt,
-        onchange = function()
+        onchange = function(ev)
             current_settings.prompt = dlg.data.prompt
         end
     }
@@ -402,7 +410,7 @@ local function create_main_dialog()
         id = "negative_prompt",
         label = "Negative:",
         text = current_settings.negative_prompt,
-        onchange = function()
+        onchange = function(ev)
             current_settings.negative_prompt = dlg.data.negative_prompt
         end
     }
@@ -411,8 +419,8 @@ local function create_main_dialog()
         id = "preset",
         label = "Presets:",
         options = preset_prompts,
-        onchange = function()
-            current_settings.prompt = dlg.data.preset;
+        onchange = function(ev)
+            current_settings.prompt = dlg.data.preset
             dlg:modify{
                 id = "prompt",
                 text = current_settings.prompt
@@ -422,11 +430,12 @@ local function create_main_dialog()
     dlg:combobox{
         id = "size",
         label = "Size:",
-        options = {"Tiny (32x32)", "Small (64x64)", "Medium (128x128)", "Large (256x256)"},
-        onchange = function()
+        options = {"Tiny (32x32)", "Small (64x64)", "Medium (128x128)", "Large (256x256)", "Portrait (64x96)",
+                   "Landscape (96x64)"},
+        onchange = function(ev)
             for _, p in ipairs(dimension_presets) do
                 if p.name == dlg.data.size then
-                    current_settings.pixel_width = p.width;
+                    current_settings.pixel_width = p.width
                     current_settings.pixel_height = p.height
                 end
             end
@@ -436,7 +445,7 @@ local function create_main_dialog()
         id = "colors",
         label = "Colors:",
         text = tostring(current_settings.colors),
-        onchange = function()
+        onchange = function(ev)
             current_settings.colors = dlg.data.colors
         end
     }
@@ -444,7 +453,7 @@ local function create_main_dialog()
         id = "remove_bg",
         text = "Remove Background",
         selected = current_settings.remove_background,
-        onclick = function()
+        onclick = function(ev)
             current_settings.remove_background = dlg.data.remove_bg
         end
     }
@@ -453,7 +462,7 @@ local function create_main_dialog()
         label = "Output:",
         options = {"New Layer", "New Frame"},
         option = current_settings.output_method,
-        onchange = function()
+        onchange = function(ev)
             current_settings.output_method = dlg.data.out
         end
     }
@@ -472,31 +481,49 @@ local function create_main_dialog()
         id = "generation_time_label",
         text = "Ready"
     }
+
+    dlg:label{
+        id = "seed_result_label",
+        text = "Seed: - (None)"
+    }
+
     dlg:button{
         id = "generate",
         text = "Generate Image",
         focus = true,
         onclick = function()
             if not current_settings.prompt or current_settings.prompt == "" then
-                app.alert("Prompt is empty");
+                app.alert("Prompt is empty")
                 return
             end
+            set_status_bar("🎨 Generating...") -- ✅ ใช้ฟังก์ชันใหม่
             update_dialog_status(dlg)
             generate_image(current_settings, function(res, err)
                 update_dialog_status(dlg)
                 if err then
                     app.alert("Error: " .. err)
+                    set_status_bar("❌ Error: " .. err)
                 elseif res and res.success then
+                    if res.seed then
+                        dlg:modify{
+                            id = "seed_result_label",
+                            text = "Seed: " .. res.seed
+                        }
+                        current_settings.seed = res.seed
+                    end
                     place_image_in_aseprite_raw(res.image, current_settings.output_method)
+                    set_status_bar("✅ Done!")
                 else
                     app.alert("Failed: " .. (res and res.error or "Unknown"))
+                    set_status_bar("❌ Failed")
                 end
             end)
         end
     }
-    dlg:show({
+
+    dlg:show{
         wait = false
-    })
+    }
     update_dialog_status(dlg)
 end
 
