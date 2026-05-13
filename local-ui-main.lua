@@ -40,7 +40,7 @@ local last_successful_seed = -1
 local request_start_time = nil
 
 -- =====================================
--- Dialog References (FIX: ป้องกันซ้อนกัน)
+-- Dialog References
 -- =====================================
 local advanced_dialog = nil
 local model_dialog = nil
@@ -290,7 +290,7 @@ local function generate_image(settings, callback)
 end
 
 -- =====================================
--- Aseprite Image Placement
+-- Aseprite Image Placement (🔥 SAFE UPGRADE)
 -- =====================================
 local function prepare_image_for_generation(output_method, image_mode)
     local cel
@@ -307,21 +307,41 @@ local function prepare_image_for_generation(output_method, image_mode)
 end
 
 local function place_image_in_aseprite_raw(image_data, output_method)
-    local image_mode = (image_data.mode == "rgba") and ColorMode.RGBA or ColorMode.RGB
+    -- [SAFE] ดึงค่าขนาดจาก current_settings ป้องกัน Error ถ้า Python ไม่ได้ส่งมา
+    local target_w = current_settings.pixel_width
+    local target_h = current_settings.pixel_height
+    local image_mode = ColorMode.RGB -- Aseprite ใช้ RGB แทบจะทุกกรณีสำหรับ RGBA data
+
     if not app.activeSprite then
         app.command.NewFile({
-            width = image_data.width,
-            height = image_data.height,
+            width = target_w,
+            height = target_h,
             colorMode = image_mode
         })
     end
+
     local cel = prepare_image_for_generation(output_method, image_mode)
-    local pixel_data = base64.decode(image_data.base64)
+
+    -- [SAFE] ดักจับการ Decode ถ้าข้อมูลพังจะไม่ทำให้ Aseprite ปิดตัวเอง
+    local decode_success, pixel_data = pcall(base64.decode, image_data.base64)
+    if not decode_success or not pixel_data then
+        app.alert("Error: Failed to decode image data from server.")
+        return
+    end
+
+    -- [SAFE] วาดภาพลง Canvas โดยครอบด้วย pcall กันเหนียวเรื่อง Data Size Mismatch
     app.transaction("Place AI Image", function()
-        local im = Image(image_data.width, image_data.height, image_mode)
-        im.bytes = pixel_data
-        cel.image:drawImage(im, Point(0, 0))
+        local success, err = pcall(function()
+            local im = Image(target_w, target_h, image_mode)
+            im.bytes = pixel_data
+            cel.image:drawImage(im, Point(0, 0))
+        end)
+
+        if not success then
+            print("Error placing image: " .. tostring(err))
+        end
     end)
+
     app.refresh()
 end
 
@@ -332,6 +352,7 @@ local function update_dialog_status(dlg)
     if not dlg then
         return
     end
+
     if is_generating then
         dlg:modify{
             id = "generate",
@@ -342,6 +363,7 @@ local function update_dialog_status(dlg)
             visible = true,
             enabled = true
         }
+
         if not loading_timer then
             loading_timer = Timer {
                 interval = 0.25,
@@ -416,7 +438,7 @@ local function update_dialog_status(dlg)
 end
 
 -- =====================================
--- Sub-dialogs (FIXED)
+-- Sub-dialogs
 -- =====================================
 local function open_advanced_dialog()
     if advanced_dialog then
@@ -839,10 +861,12 @@ function create_main_dialog()
                 id = "seed_val",
                 text = format_seed(current_settings.seed)
             }
+
             if not current_settings.prompt or current_settings.prompt:match("^%s*$") then
                 app.alert("Prompt cannot be empty.");
                 return
             end
+
             set_status_bar("Generating...");
             update_dialog_status(dlg)
             generate_image(current_settings, function(res, err)
