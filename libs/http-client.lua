@@ -19,7 +19,15 @@ local function create_temp_filename()
     temp_counter = temp_counter + 1
     local timestamp = os.time()
     local random_part = math.random(1000, 9999)
-    return string.format("aseprite_temp_%d_%d_%d.tmp", timestamp, random_part, temp_counter)
+    
+    local temp_dir = os.getenv("TEMP") or os.getenv("TMP") or os.getenv("USERPROFILE") or "."
+    local sep = package.config:sub(1, 1)
+    
+    if temp_dir:sub(-1) == sep then
+        return temp_dir .. string.format("aseprite_temp_%d_%d_%d.tmp", timestamp, random_part, temp_counter)
+    else
+        return temp_dir .. sep .. string.format("aseprite_temp_%d_%d_%d.tmp", timestamp, random_part, temp_counter)
+    end
 end
 
 -- Create temporary file with unique name

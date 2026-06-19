@@ -1,1 +1,1 @@
-{"installedFiles": [".qodo/", "base64.lua", "http-client.lua", "json.lua", "local-ui-main.lua", "main.lua", "package.json"]}
+{"installedFiles": [".qodo/", "libs/api-service.lua", "libs/base64.lua", "libs/http-client.lua", "libs/json.lua", "libs/settings-store.lua", "local-ui-main.lua", "main.lua", "package.json"]}
