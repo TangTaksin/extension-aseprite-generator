@@ -10,12 +10,9 @@ desktop.ini
 .vscode/
 
 # --- Aseprite / Extension Specific ---
-# หากคุณมีการแพ็ค extension เป็นไฟล์ .zip หรือ .aseprite-extension เพื่อแจกจ่าย 
-# ไม่ควรเอาตัวที่แพ็คแล้วขึ้น Repo (ให้คนโหลดจาก Release แทน)
 *.aseprite-extension
 *.zip
 
-# --- รายชื่อที่คุณส่งมา (Compiled/Binary) ---
 # Compiled Lua sources
 luac.out
 
