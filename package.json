@@ -1,14 +1,14 @@
 {
     "name": "local-ai-generator",
-    "displayName": "Local AI Generator", 
+    "displayName": "Local AI Generator",
     "description": "Generate pixel art using local Stable Diffusion models",
-    "version": "1.0.0",
+    "version": "1.0.4",
     "author": {
-        "name": "RED",
-        "email": "redhere303@gmail.com"
+        "name": "Daggoot",
+        "email": "Taksinsuriya@gmail.com"
     },
     "license": "MIT",
-    "categories": ["Scripts"],
+    "categories": ["AI"],
     "contributes": {
         "scripts": [
             {

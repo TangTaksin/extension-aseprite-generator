@@ -17,8 +17,8 @@ api_service.last_generation_time = 0
 
 local plugin_config = {
     server_url = "http://127.0.0.1:5000",
-    name = "Local AI Generator v2.0",
-    version = "2.0",
+    name = "Local AI Generator v1.0.4",
+    version = "1.0.4",
     request_timeout = 300
 }
 
