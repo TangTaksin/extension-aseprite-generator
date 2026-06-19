@@ -18,6 +18,7 @@ settings_store.current_settings = {
     colors = 16,
     seed = -1,
     remove_background = false,
+    use_dithering = false,
     model_name = "stabilityai/stable-diffusion-xl-base-1.0",
     lora_model = "None",
     lora_strength = 0.8,

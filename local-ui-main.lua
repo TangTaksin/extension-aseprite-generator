@@ -208,6 +208,7 @@ local function open_advanced_dialog()
         id = "cfg",
         label = "CFG Scale:",
         text = string.format("%.1f", current_settings.guidance_scale),
+        decimals = 1,
         onchange = function()
             current_settings.guidance_scale = tonumber(adv.data.cfg) or 7.5
         end
@@ -226,9 +227,9 @@ local function open_advanced_dialog()
     adv:check{
         id = "dither",
         text = "Enable Floyd-Steinberg Dithering",
-        selected = false,
+        selected = current_settings.use_dithering or false,
         onclick = function()
-            -- Optional dithering state hook
+            current_settings.use_dithering = adv.data.dither
         end
     }
     adv:separator{ text = "Canvas Output" }
@@ -322,14 +323,6 @@ local function open_model_dialog()
         end
     }
     mdl:show{ wait = false }
-
-    -- Background fetch list on open
-    api_service.fetch_models_and_loras(function()
-        if model_dialog then
-            model_dialog:modify{ id = "model_name", options = api_service.available_models, option = current_settings.model_name }
-            model_dialog:modify{ id = "lora", options = api_service.available_loras, option = current_settings.lora_model }
-        end
-    end)
 end
 
 local create_main_dialog
@@ -619,4 +612,21 @@ end
 -- Entry Point
 -- =====================================
 settings_store.load_profiles_from_disk()
-api_service.fetch_models_and_loras(create_main_dialog)
+create_main_dialog()
+
+-- Fetch models and loras in background without blocking UI startup
+api_service.fetch_models_and_loras(function()
+    update_dialog_status(current_dialog)
+    -- Sync default model from server if user is still using the standard client default
+    if api_service.default_model and current_settings.model_name == "stabilityai/stable-diffusion-xl-base-1.0" then
+        current_settings.model_name = api_service.default_model
+        api_service.server_status = "Ready -- " .. current_settings.model_name
+        update_dialog_status(current_dialog)
+    end
+    -- Update open model settings dialog if it is open when fetch completes
+    if model_dialog then
+        model_dialog:modify{ id = "model_name", options = api_service.available_models, option = current_settings.model_name }
+        model_dialog:modify{ id = "lora", options = api_service.available_loras, option = current_settings.lora_model }
+    end
+end)
+update_dialog_status(current_dialog)

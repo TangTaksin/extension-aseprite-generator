@@ -7,7 +7,11 @@ local http_client = dofile(libs_dir .. "/http-client.lua")
 local api_service = {}
 
 api_service.server_status = "Unknown"
-api_service.available_models = {"ponyDiffusionV6XL_v6StartWithThisOne.safetensors"}
+api_service.default_model = nil
+api_service.available_models = {
+    "stabilityai/stable-diffusion-xl-base-1.0",
+    "runwayml/stable-diffusion-v1-5"
+}
 api_service.available_loras = {"None"}
 api_service.last_successful_seed = -1
 api_service.is_generating = false
@@ -41,6 +45,9 @@ function api_service.fetch_models_and_loras(callback)
                 if health_res then
                     api_service.server_status = "Online" ..
                                         (health_res.current_model and (" -- " .. health_res.current_model) or "")
+                    if health_res.default_model then
+                        api_service.default_model = health_res.default_model
+                    end
                 else
                     api_service.server_status = "Offline"
                 end
@@ -81,6 +88,7 @@ function api_service.generate_image(settings, callback)
         lora_model = settings.lora_model,
         lora_strength = settings.lora_strength,
         remove_background = settings.remove_background,
+        use_dithering = settings.use_dithering,
         seed = settings.seed ~= -1 and settings.seed or nil,
         model_name = settings.model_name
     }
