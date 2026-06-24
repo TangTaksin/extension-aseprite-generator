@@ -8,7 +8,9 @@
         "email": "Taksinsuriya@gmail.com"
     },
     "license": "MIT",
-    "categories": ["AI"],
+    "categories": [
+        "AI"
+    ],
     "contributes": {
         "scripts": [
             {
