@@ -234,6 +234,26 @@ local function open_advanced_dialog()
             current_settings.remove_background_threshold = adv.data.bg_threshold / 100
         end
     }
+    adv:separator{ text = "Pixel Snapping" }
+    adv:check{
+        id = "pixel_snapping",
+        text = "Enable Pixel Snapping (Align grid)",
+        selected = current_settings.pixel_snapping,
+        onclick = function()
+            current_settings.pixel_snapping = adv.data.pixel_snapping
+            adv:modify{ id = "pixel_size_val", enabled = adv.data.pixel_snapping }
+        end
+    }
+    adv:number{
+        id = "pixel_size_val",
+        label = "Pixel Size Override (0 for Auto):",
+        text = string.format("%.1f", current_settings.pixel_size_override or 0.0),
+        decimals = 1,
+        enabled = current_settings.pixel_snapping,
+        onchange = function()
+            current_settings.pixel_size_override = tonumber(adv.data.pixel_size_val) or 0.0
+        end
+    }
     adv:separator{ text = "Canvas Output" }
     adv:combobox{
         id = "out",

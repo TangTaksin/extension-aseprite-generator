@@ -7,6 +7,9 @@
 #### Added
 - Added `bg_threshold` slider (BG Remove Threshold) in Advanced Settings dialog to control the strictness of background removal (0.10 - 0.90)
 - Configured default value `remove_background_threshold = 0.5` in user profiles settings
+- Added Enable Pixel Snapping checkbox and Pixel Size Override (0 for Auto) controls to the Advanced Settings dialog
+- Configured default values for `pixel_snapping` (false) and `pixel_size_override` (0.0) in settings store
+
 
 #### Changed
 - Bumped extension version to `1.0.5` across config scripts, payload mappings, and UI templates
