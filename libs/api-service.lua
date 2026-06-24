@@ -88,7 +88,7 @@ function api_service.generate_image(settings, callback)
         lora_model = settings.lora_model,
         lora_strength = settings.lora_strength,
         remove_background = settings.remove_background,
-        use_dithering = settings.use_dithering,
+        remove_background_threshold = settings.remove_background_threshold,
         seed = settings.seed ~= -1 and settings.seed or nil,
         model_name = settings.model_name
     }

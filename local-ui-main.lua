@@ -223,13 +223,15 @@ local function open_advanced_dialog()
             current_settings.steps = adv.data.steps
         end
     }
-    adv:separator{ text = "Quantization & Filters" }
-    adv:check{
-        id = "dither",
-        text = "Enable Floyd-Steinberg Dithering",
-        selected = current_settings.use_dithering or false,
-        onclick = function()
-            current_settings.use_dithering = adv.data.dither
+    adv:separator{ text = "Background Removal" }
+    adv:slider{
+        id = "bg_threshold",
+        label = "BG Remove Threshold:",
+        min = 10,
+        max = 90,
+        value = math.floor((current_settings.remove_background_threshold or 0.5) * 100),
+        onchange = function()
+            current_settings.remove_background_threshold = adv.data.bg_threshold / 100
         end
     }
     adv:separator{ text = "Canvas Output" }
