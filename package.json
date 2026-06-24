@@ -2,7 +2,7 @@
     "name": "local-ai-generator",
     "displayName": "Local AI Generator",
     "description": "Generate pixel art using local Stable Diffusion models",
-    "version": "1.0.4",
+    "version": "1.0.5",
     "author": {
         "name": "Daggoot",
         "email": "Taksinsuriya@gmail.com"

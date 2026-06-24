@@ -418,7 +418,7 @@ function create_main_dialog()
     if current_dialog then current_dialog:close() end
     if loading_timer then loading_timer:stop() loading_timer = nil end
 
-    local dlg = Dialog("Local AI Generator v1.0.4")
+    local dlg = Dialog("Local AI Generator v1.0.5")
     current_dialog = dlg
     local current_size_name = "Small (64x64)"
     for _, p in ipairs(dimension_presets) do

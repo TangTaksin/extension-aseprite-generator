@@ -2,6 +2,20 @@
 
 ---
 
+### [1.0.5]
+
+#### Added
+- Added `bg_threshold` slider (BG Remove Threshold) in Advanced Settings dialog to control the strictness of background removal (0.10 - 0.90)
+- Configured default value `remove_background_threshold = 0.5` in user profiles settings
+
+#### Changed
+- Bumped extension version to `1.0.5` across config scripts, payload mappings, and UI templates
+
+#### Removed
+- Removed the Floyd-Steinberg dithering checkbox and its label separator from Advanced Settings UI
+
+---
+
 ### [1.0.4]
 
 #### Added
